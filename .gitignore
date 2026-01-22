@@ -1,0 +1,8 @@
+# General
+.env
+
+# IDE
+.vscode/
+
+# Claude
+CLAUDE.md
