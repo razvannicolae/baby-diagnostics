@@ -13,6 +13,17 @@ success() { echo -e "${GREEN}    ✓ $1${NC}"; }
 warn()    { echo -e "${YELLOW}    ! $1${NC}"; }
 die()     { echo -e "${RED}    ✗ $1${NC}"; exit 1; }
 
+# Resolve 'docker compose' (plugin) or 'docker-compose' (standalone)
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    die "Neither 'docker compose' nor 'docker-compose' found. Install Docker from https://docs.docker.com/get-docker/"
+  fi
+}
+
 # ── 1. Check required tools ────────────────────────────────────────────────────
 
 info "Checking required tools..."
@@ -70,7 +81,7 @@ else
 
   # Auto-generate secrets so the app can start immediately
   JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
-  FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || echo "")
+  FERNET_KEY=$(cd "$ROOT_DIR/backend" && uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || echo "")
 
   # Replace placeholder values in-place (works on both macOS and Linux)
   sed -i.bak "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$JWT_SECRET|" .env

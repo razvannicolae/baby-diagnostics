@@ -3,11 +3,22 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Resolve 'docker compose' (plugin) or 'docker-compose' (standalone)
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    echo "Error: neither 'docker compose' nor 'docker-compose' found." >&2; exit 1
+  fi
+}
+
 echo "==> Starting PostgreSQL..."
-docker compose -f "$ROOT_DIR/docker-compose.dev.yml" up db -d
+docker_compose -f "$ROOT_DIR/docker-compose.dev.yml" up db -d
 
 echo "==> Waiting for database to be ready..."
-until docker compose -f "$ROOT_DIR/docker-compose.dev.yml" exec db pg_isready -U babybio -q 2>/dev/null; do
+until docker_compose -f "$ROOT_DIR/docker-compose.dev.yml" exec db pg_isready -U babybio -q 2>/dev/null; do
   sleep 1
 done
 
