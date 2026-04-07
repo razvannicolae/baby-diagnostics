@@ -1,8 +1,26 @@
-# General
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # Claude
+.claude/
 CLAUDE.md
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log

@@ -1,0 +1,132 @@
+# HSV reference calibration for baby diagnostic test strips.
+# Each biomarker has a gradient of HSV reference points mapping to concentrations.
+# Pad geometry is normalized (0-1) relative to the detected strip.
+
+pad_geometry:
+  # [x_start, y_start, width, height] as fractions of strip dimensions
+  - name: pH
+    region: [0.02, 0.15, 0.21, 0.70]
+  - name: creatinine
+    region: [0.27, 0.15, 0.21, 0.70]
+  - name: vitamin_a
+    region: [0.52, 0.15, 0.21, 0.70]
+  - name: vitamin_d
+    region: [0.77, 0.15, 0.21, 0.70]
+
+biomarkers:
+  pH:
+    unit: ""
+    normal_min: 5.0
+    normal_max: 7.0
+    gradient:
+      - hsv: [20, 200, 180]
+        value: 4.5
+        label: "4.5"
+      - hsv: [25, 180, 190]
+        value: 5.0
+        label: "5.0"
+      - hsv: [30, 160, 200]
+        value: 5.5
+        label: "5.5"
+      - hsv: [40, 140, 210]
+        value: 6.0
+        label: "6.0"
+      - hsv: [55, 120, 200]
+        value: 6.5
+        label: "6.5"
+      - hsv: [70, 130, 190]
+        value: 7.0
+        label: "7.0"
+      - hsv: [90, 150, 170]
+        value: 7.5
+        label: "7.5"
+      - hsv: [110, 160, 160]
+        value: 8.0
+        label: "8.0"
+      - hsv: [125, 170, 150]
+        value: 8.5
+        label: "8.5"
+
+  creatinine:
+    unit: "mg/dL"
+    normal_min: 0.2
+    normal_max: 0.8
+    gradient:
+      - hsv: [25, 60, 220]
+        value: 0.1
+        label: "0.1 mg/dL"
+      - hsv: [22, 100, 200]
+        value: 0.2
+        label: "0.2 mg/dL"
+      - hsv: [18, 140, 190]
+        value: 0.4
+        label: "0.4 mg/dL"
+      - hsv: [15, 170, 175]
+        value: 0.6
+        label: "0.6 mg/dL"
+      - hsv: [10, 190, 160]
+        value: 0.8
+        label: "0.8 mg/dL"
+      - hsv: [5, 210, 145]
+        value: 1.2
+        label: "1.2 mg/dL"
+      - hsv: [0, 220, 130]
+        value: 2.0
+        label: "2.0 mg/dL"
+
+  vitamin_a:
+    unit: "mcg/dL"
+    normal_min: 20.0
+    normal_max: 60.0
+    gradient:
+      - hsv: [45, 60, 220]
+        value: 10.0
+        label: "10 mcg/dL"
+      - hsv: [42, 100, 200]
+        value: 20.0
+        label: "20 mcg/dL"
+      - hsv: [38, 140, 185]
+        value: 30.0
+        label: "30 mcg/dL"
+      - hsv: [35, 170, 170]
+        value: 40.0
+        label: "40 mcg/dL"
+      - hsv: [30, 190, 155]
+        value: 50.0
+        label: "50 mcg/dL"
+      - hsv: [25, 210, 140]
+        value: 60.0
+        label: "60 mcg/dL"
+      - hsv: [20, 225, 125]
+        value: 80.0
+        label: "80 mcg/dL"
+
+  vitamin_d:
+    unit: "ng/mL"
+    normal_min: 30.0
+    normal_max: 80.0
+    gradient:
+      - hsv: [130, 50, 220]
+        value: 10.0
+        label: "10 ng/mL"
+      - hsv: [125, 90, 200]
+        value: 20.0
+        label: "20 ng/mL"
+      - hsv: [120, 130, 185]
+        value: 30.0
+        label: "30 ng/mL"
+      - hsv: [115, 160, 170]
+        value: 40.0
+        label: "40 ng/mL"
+      - hsv: [108, 180, 155]
+        value: 50.0
+        label: "50 ng/mL"
+      - hsv: [100, 200, 140]
+        value: 60.0
+        label: "60 ng/mL"
+      - hsv: [95, 215, 130]
+        value: 80.0
+        label: "80 ng/mL"
+      - hsv: [88, 225, 120]
+        value: 100.0
+        label: "100 ng/mL"

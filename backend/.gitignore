@@ -1,2 +1,26 @@
-# General
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
 .python-version
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Testing & Coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+
+# Distribution
+*.egg-info/
+dist/
+build/
+
+# Ruff
+.ruff_cache/
