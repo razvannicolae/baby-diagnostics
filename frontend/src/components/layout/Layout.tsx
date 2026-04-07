@@ -3,8 +3,8 @@ import { BottomNav } from './BottomNav';
 
 export function Layout() {
   return (
-    <div style={{ minHeight: '100dvh', background: '#F5F7FA', display: 'flex', flexDirection: 'column' }}>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', background: '#F5F7FA', display: 'flex', flexDirection: 'column' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         <Outlet />
       </main>
       <BottomNav />

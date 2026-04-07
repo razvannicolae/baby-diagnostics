@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Project Overview
 
 **Baby Diagnostics (BabyBio)** — Monorepo mobile web app for analyzing baby diagnostic test strips using computer vision. AI chat for result explanations. NICU workflow.
@@ -8,7 +10,7 @@
 
 ## Tech Stack
 
-- **Frontend:** TypeScript, React 18, Vite, Tailwind CSS
+- **Frontend:** TypeScript, React 19, Vite (rolldown-vite override), Tailwind CSS v4
 - **Backend:** Python 3.11+, FastAPI (async), SQLAlchemy 2.0 (async) + Alembic, asyncpg
 - **Database:** PostgreSQL 16 (UUID PKs, UTC timestamps)
 - **Auth:** Google Sign-In → `google-auth` verification → app JWT (`python-jose`, HS256)
@@ -76,11 +78,64 @@ The system prompt in `backend/app/llm/prompts.py` MUST enforce:
 
 - `/login` — Google Sign-In
 - `/` — Dashboard (scan history, baby selector)
-- `/capture` — Camera capture
+- `/capture` — Camera capture (full-screen, no BottomNav)
 - `/results/:id` — Biomarker results display
 - `/chat/:scanId` — AI chat
+- `/trends` — Biomarker trend charts + scan history
+- `/profile` — User profile
 
-All routes except `/login` wrapped in `<ProtectedRoute>`.
+All routes except `/login` wrapped in `<ProtectedRoute>`. All except `/capture` wrapped in `<Layout>` (provides BottomNav).
+
+## Development
+
+**Package managers:** Backend uses `uv`, frontend uses `npm`.
+
+**Start everything (recommended):**
+```bash
+./dev_start.sh  # Starts DB (Docker), runs migrations, starts backend + frontend
+```
+
+**Individual services:**
+```bash
+# DB only
+docker compose -f docker-compose.dev.yml up db -d
+
+# Backend (from /backend)
+uv run uvicorn app.main:app --reload --port 8000
+
+# Frontend (from /frontend)
+npm run dev
+```
+
+**Migrations (from /backend):**
+```bash
+uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "description"
+```
+
+**Lint:**
+```bash
+cd backend && uv run ruff check .
+cd frontend && npm run lint
+```
+
+**Tests (from /backend):**
+```bash
+uv run pytest --asyncio-mode=auto
+uv run pytest path/to/test_file.py::test_name --asyncio-mode=auto  # single test
+uv run pytest --cov=app --cov-report=html
+```
+
+**Required `.env` (at repo root):**
+```
+JWT_SECRET_KEY=<required, no default>
+GOOGLE_CLIENT_ID=
+FIELD_ENCRYPTION_KEY=
+ANTHROPIC_API_KEY=
+DATABASE_URL=postgresql+asyncpg://babybio:babybio_dev@localhost:5432/babybio
+APP_ENV=development
+CORS_ORIGINS=http://localhost:5173
+```
 
 ## Coding Standards
 
@@ -94,24 +149,7 @@ All routes except `/login` wrapped in `<ProtectedRoute>`.
 
 ## Testing
 
-```bash
-pytest --asyncio-mode=auto              # Run all
-pytest --cov=app --cov-report=html      # With coverage
-```
-
-Test with separate DB. `conftest.py` manages create/teardown. Mock auth for route tests.
-
-## Implementation Phases
-
-1. **Foundation:** DB models, Alembic migrations, FastAPI skeleton, health check, Docker Compose
-2. **Auth:** JWT + encryption utils, Google token verification, protected route dependency
-3. **CRUD:** Baby profiles, scan history endpoints
-4. **CV:** Color matching, preprocessing, calibration YAML, analyzer, analysis endpoint
-5. **LLM Chat:** System prompt, Anthropic client, WebSocket handler, conversation manager
-6. **Security:** Rate limiters, field encryption, input validation, CORS, security headers
-7. **Frontend:** Auth context, API client, camera capture, results display, chat UI, navigation
-8. **Deploy:** Dockerfiles, Nginx config, EC2 setup, Certbot HTTPS
-9. **Testing:** Unit (CV, security), integration (API), WebSocket tests, mobile polish
+Test with a separate DB. `conftest.py` manages create/teardown. Mock auth for route tests. See the test commands in the Development section above.
 
 ## Detailed Reference
 
