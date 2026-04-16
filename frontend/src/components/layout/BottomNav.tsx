@@ -62,6 +62,7 @@ export function BottomNav() {
       background: '#fff', borderTop: '1px solid #E2E8F0',
       display: 'flex', alignItems: 'flex-start', paddingTop: '10px',
       justifyContent: 'space-around',
+      position: 'relative', zIndex: 10, overflow: 'visible',
       WebkitTapHighlightColor: 'transparent'
     }}>
       {navItems.map((item) => {

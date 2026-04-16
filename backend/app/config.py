@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     # LLM
     anthropic_api_key: str = ""
+    llm_provider: str = "anthropic"          # "anthropic" | "lmstudio"
+    lmstudio_base_url: str = "http://127.0.0.1:1234"
+    lmstudio_api_key: str = ""               # optional — only if auth is enabled in LM Studio
+    lmstudio_model: str = "qwen3.6"          # model name as shown in LM Studio
 
     # CV
     calibration_path: str = "app/cv/calibration/default.yaml"

@@ -116,6 +116,7 @@ export function Home() {
 
         {scans.map((scan) => {
           const hasFlagged = scan.biomarkers.some((b) => b.is_flagged);
+          const baby = babies.find((b) => b.id === scan.baby_id);
 
           return (
             <Link key={scan.id} to={`/results/${scan.id}`} style={{ display: 'block', textDecoration: 'none', marginBottom: '12px' }}>
@@ -139,8 +140,16 @@ export function Home() {
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>
-                    {new Date(scan.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>
+                      {new Date(scan.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                    {baby && (
+                      <>
+                        <span style={{ fontSize: '11px', color: '#CBD5E1' }}>·</span>
+                        <span style={{ fontSize: '12px', color: '#1565C0', fontWeight: 600 }}>{baby.name}</span>
+                      </>
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
                     <span style={{ fontSize: '14px', fontWeight: 600, color: '#1A202C' }}>Sample Analysis</span>

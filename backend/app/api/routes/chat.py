@@ -31,6 +31,7 @@ async def chat_websocket(websocket: WebSocket, scan_id: str) -> None:
     token = websocket.query_params.get("token", "")
     user_id = verify_access_token(token)
     if user_id is None:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
@@ -38,6 +39,7 @@ async def chat_websocket(websocket: WebSocket, scan_id: str) -> None:
     try:
         parsed_scan_id = uuid.UUID(scan_id)
     except ValueError:
+        await websocket.accept()
         await websocket.close(code=4002, reason="Invalid scan ID")
         return
 
@@ -45,6 +47,7 @@ async def chat_websocket(websocket: WebSocket, scan_id: str) -> None:
     async with async_session_factory() as db:
         user = await user_repo.get_by_id(db, user_id)
         if user is None:
+            await websocket.accept()
             await websocket.close(code=4001, reason="User not found")
             return
 

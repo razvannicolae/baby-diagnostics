@@ -1,132 +1,193 @@
 # HSV reference calibration for baby diagnostic test strips.
 # Each biomarker has a gradient of HSV reference points mapping to concentrations.
-# Pad geometry is normalized (0-1) relative to the detected strip.
+# Pad geometry is normalized (0-1) relative to the full captured image frame.
+#
+# Physical layout (camera view, portrait orientation — strip fills most of frame):
+#
+#   LEFT column  : pH strip — tall vertical card with 4 stacked color pads.
+#                  Top-to-bottom pad colors: olive/green, white, blue, yellow/gold.
+#                  flip_sub_pads: true reverses sampling order so row indices match
+#                  the reference chart (chart top = physical bottom of strip).
+#
+#   RIGHT-TOP    : creatinine — single square pad (yellow/orange when reacted).
+#
+#   RIGHT-BOTTOM : albumin   — single square pad (white→blue gradient when reacted).
+#
+# sub_pads: N — biomarker has N stacked color rows; each gradient entry uses
+#   `colors: [[H,S,V], ...]` (one per row) instead of a single `hsv:`.
+# flip_sub_pads: true — physical strip is inverted; reverses row sampling order so
+#   it matches the reference chart order (top-of-chart = bottom of physical strip).
+# scale_type: ordinal — categorical scale; uses `normal_category` to determine
+#   flagging. If normal_category is omitted, values are never flagged.
+#
+# NOTE: All region values are approximate — recalibrate against actual captured images.
 
 pad_geometry:
-  # [x_start, y_start, width, height] as fractions of strip dimensions
+  # Sample points as [x, y] fractions of the captured square image.
+  # These match the dot positions shown in the camera overlay (CameraView.tsx).
+  # A small area around each point is sampled (see SAMPLE_RADIUS in analyzer.py).
   - name: pH
-    region: [0.02, 0.15, 0.21, 0.70]
+    sample_points:
+      - [0.18, 0.139]   # pad 1 (top of strip)
+      - [0.18, 0.356]   # pad 2
+      - [0.18, 0.574]   # pad 3
+      - [0.18, 0.791]   # pad 4 (bottom of strip)
   - name: creatinine
-    region: [0.27, 0.15, 0.21, 0.70]
-  - name: vitamin_a
-    region: [0.52, 0.15, 0.21, 0.70]
-  - name: vitamin_d
-    region: [0.77, 0.15, 0.21, 0.70]
+    sample_points:
+      - [0.71, 0.235]   # single pad
+  - name: albumin
+    sample_points:
+      - [0.71, 0.665]   # single pad
 
 biomarkers:
   pH:
     unit: ""
-    normal_min: 5.0
-    normal_max: 7.0
+    normal_min: 6.0
+    normal_max: 8.0
     gradient:
-      - hsv: [20, 200, 180]
-        value: 4.5
-        label: "4.5"
-      - hsv: [25, 180, 190]
-        value: 5.0
-        label: "5.0"
-      - hsv: [30, 160, 200]
-        value: 5.5
-        label: "5.5"
-      - hsv: [40, 140, 210]
-        value: 6.0
-        label: "6.0"
-      - hsv: [55, 120, 200]
-        value: 6.5
-        label: "6.5"
-      - hsv: [70, 130, 190]
-        value: 7.0
-        label: "7.0"
-      - hsv: [90, 150, 170]
-        value: 7.5
-        label: "7.5"
-      - hsv: [110, 160, 160]
-        value: 8.0
-        label: "8.0"
-      - hsv: [125, 170, 150]
-        value: 8.5
-        label: "8.5"
+      # rgb_colors: [pad1, pad2, pad3, pad4]
+      # pad1 = rightmost square in reference chart (closest to pH number label).
+      # Matching uses RGB Euclidean distance (see color_matching.py).
+      # Colors picked from clinical reference chart (Image 6).
+      - value: 0.0
+        label: "0"
+        rgb_colors:
+          - [218,  78, 130]   # #DA4E82  pad1: hot pink/magenta
+          - [230, 120,  42]   # #E6782A  pad2: orange
+          - [ 58, 155, 165]   # #3A9BA5  pad3: teal
+          - [125, 155,  47]   # #7D9B2F  pad4: olive-green
+      - value: 1.0
+        label: "1"
+        rgb_colors:
+          - [212,  88, 118]   # #D45876  pad1: pink
+          - [226, 118,  45]   # #E2762D  pad2: orange
+          - [ 55, 152, 162]   # #3798A2  pad3: teal
+          - [122, 153,  47]   # #7A992F  pad4: olive-green
+      - value: 2.0
+        label: "2"
+        rgb_colors:
+          - [205,  68,  72]   # #CD4448  pad1: red-pink
+          - [212,  88,  42]   # #D4582A  pad2: red-orange
+          - [ 52, 148, 160]   # #3494A0  pad3: teal
+          - [120, 150,  45]   # #78962D  pad4: olive-green
+      - value: 3.0
+        label: "3"
+        rgb_colors:
+          - [220,  95,  52]   # #DC5F34  pad1: orange-red
+          - [225, 128,  45]   # #E1802D  pad2: orange
+          - [ 52, 145, 155]   # #34919B  pad3: teal
+          - [120, 150,  42]   # #78962A  pad4: olive-green
+      - value: 4.0
+        label: "4"
+        rgb_colors:
+          - [218, 165,  38]   # #DAA526  pad1: amber/golden
+          - [228, 172,  42]   # #E4AC2A  pad2: warm amber
+          - [ 48, 138, 160]   # #308AA0  pad3: teal-blue
+          - [130, 160,  52]   # #82A034  pad4: yellow-green
+      - value: 5.0
+        label: "5"
+        rgb_colors:
+          - [215, 155,  42]   # #D79B2A  pad1: amber
+          - [225, 168,  45]   # #E1A82D  pad2: warm amber
+          - [ 48, 135, 158]   # #30879E  pad3: teal
+          - [128, 158,  52]   # #809E34  pad4: olive-green
+      - value: 6.0
+        label: "6"
+        rgb_colors:
+          - [220, 205,  45]   # #DCCD2D  pad1: bright yellow
+          - [225, 210,  52]   # #E1D234  pad2: yellow
+          - [ 48, 130, 155]   # #30829B  pad3: teal-blue
+          - [130, 158,  55]   # #829E37  pad4: olive-green
+      - value: 7.0
+        label: "7"
+        rgb_colors:
+          - [188, 185,  58]   # #BCB93A  pad1: yellow-olive
+          - [168, 185,  68]   # #A8B944  pad2: yellow-green
+          - [ 65, 148, 172]   # #4194AC  pad3: sky blue
+          - [128, 155,  55]   # #809B37  pad4: olive-green
+      - value: 8.0
+        label: "8"
+        rgb_colors:
+          - [178, 178,  62]   # #B2B23E  pad1: olive-yellow
+          - [158, 168,  68]   # #9EA844  pad2: olive
+          - [ 68, 148, 175]   # #4494AF  pad3: light blue
+          - [128, 152,  52]   # #809834  pad4: olive-green
+      - value: 9.0
+        label: "9"
+        rgb_colors:
+          - [195, 172,  52]   # #C3AC34  pad1: golden
+          - [ 52, 148, 168]   # #3494A8  pad2: teal-blue
+          - [ 45, 150, 165]   # #2D96A5  pad3: teal-cyan
+          - [128, 150,  50]   # #809632  pad4: olive-green
+      - value: 10.0
+        label: "10"
+        rgb_colors:
+          - [195, 165,  50]   # #C3A532  pad1: golden
+          - [ 52,  98, 182]   # #3462B6  pad2: medium blue
+          - [ 88,  72, 168]   # #5848A8  pad3: blue-purple
+          - [138, 148,  55]   # #8A9437  pad4: olive-yellow
+      - value: 11.0
+        label: "11"
+        rgb_colors:
+          - [158, 152,  58]   # #9E983A  pad1: olive-yellow
+          - [ 52,  95, 178]   # #345FB2  pad2: blue
+          - [122,  62, 158]   # #7A3E9E  pad3: purple
+          - [148, 120,  52]   # #947834  pad4: brown-olive
+      - value: 12.0
+        label: "12"
+        rgb_colors:
+          - [155, 148,  55]   # #9B9437  pad1: olive-yellow
+          - [ 50,  92, 175]   # #325CAF  pad2: blue
+          - [128,  58, 152]   # #803A98  pad3: purple
+          - [142, 112,  45]   # #8E702D  pad4: brown-olive
+      - value: 13.0
+        label: "13"
+        rgb_colors:
+          - [152, 145,  52]   # #989134  pad1: olive-yellow
+          - [ 48,  88, 170]   # #3058AA  pad2: blue
+          - [148,  52, 145]   # #943491  pad3: magenta-purple
+          - [158,  88,  42]   # #9E582A  pad4: brown-red
+      - value: 14.0
+        label: "14"
+        rgb_colors:
+          - [150, 142,  50]   # #968E32  pad1: olive-yellow
+          - [ 52,  88, 168]   # #3458A8  pad2: blue
+          - [148,  55, 150]   # #943796  pad3: purple
+          - [195,  62,  38]   # #C33E26  pad4: red-orange
 
   creatinine:
-    unit: "mg/dL"
-    normal_min: 0.2
-    normal_max: 0.8
+    unit: ""
+    scale_type: ordinal
+    normal_category: "3+"
+    # rgb: values picked from clinical reference chart (Image 5).
+    # Matching uses plain RGB Euclidean distance (see color_matching.py).
     gradient:
-      - hsv: [25, 60, 220]
-        value: 0.1
-        label: "0.1 mg/dL"
-      - hsv: [22, 100, 200]
-        value: 0.2
-        label: "0.2 mg/dL"
-      - hsv: [18, 140, 190]
-        value: 0.4
-        label: "0.4 mg/dL"
-      - hsv: [15, 170, 175]
-        value: 0.6
-        label: "0.6 mg/dL"
-      - hsv: [10, 190, 160]
-        value: 0.8
-        label: "0.8 mg/dL"
-      - hsv: [5, 210, 145]
-        value: 1.2
-        label: "1.2 mg/dL"
-      - hsv: [0, 220, 130]
-        value: 2.0
-        label: "2.0 mg/dL"
+      - rgb: [220, 230, 143]   # #DCE68F — very light chartreuse
+        value: 1
+        label: "1+"
+      - rgb: [163, 193, 113]   # #A3C171 — medium yellow-green
+        value: 2
+        label: "2+"
+      - rgb: [133, 165, 93]    # #85A55D — darker olive-green
+        value: 3
+        label: "3+"
 
-  vitamin_a:
-    unit: "mcg/dL"
-    normal_min: 20.0
-    normal_max: 60.0
+  albumin:
+    unit: ""
+    scale_type: ordinal
+    normal_category: "normal"   # normal = no albumin; 1+/2+/3+ are flagged
+    # rgb: values picked from clinical reference chart (Image 4).
+    # Matching uses plain RGB Euclidean distance (see color_matching.py).
     gradient:
-      - hsv: [45, 60, 220]
-        value: 10.0
-        label: "10 mcg/dL"
-      - hsv: [42, 100, 200]
-        value: 20.0
-        label: "20 mcg/dL"
-      - hsv: [38, 140, 185]
-        value: 30.0
-        label: "30 mcg/dL"
-      - hsv: [35, 170, 170]
-        value: 40.0
-        label: "40 mcg/dL"
-      - hsv: [30, 190, 155]
-        value: 50.0
-        label: "50 mcg/dL"
-      - hsv: [25, 210, 140]
-        value: 60.0
-        label: "60 mcg/dL"
-      - hsv: [20, 225, 125]
-        value: 80.0
-        label: "80 mcg/dL"
-
-  vitamin_d:
-    unit: "ng/mL"
-    normal_min: 30.0
-    normal_max: 80.0
-    gradient:
-      - hsv: [130, 50, 220]
-        value: 10.0
-        label: "10 ng/mL"
-      - hsv: [125, 90, 200]
-        value: 20.0
-        label: "20 ng/mL"
-      - hsv: [120, 130, 185]
-        value: 30.0
-        label: "30 ng/mL"
-      - hsv: [115, 160, 170]
-        value: 40.0
-        label: "40 ng/mL"
-      - hsv: [108, 180, 155]
-        value: 50.0
-        label: "50 ng/mL"
-      - hsv: [100, 200, 140]
-        value: 60.0
-        label: "60 ng/mL"
-      - hsv: [95, 215, 130]
-        value: 80.0
-        label: "80 ng/mL"
-      - hsv: [88, 225, 120]
-        value: 100.0
-        label: "100 ng/mL"
+      - rgb: [210, 230, 150]   # #D2E696 — pale lime/yellow-green
+        value: 0
+        label: "normal"
+      - rgb: [170, 220, 185]   # #AADCB9 — light mint green
+        value: 1
+        label: "1+"
+      - rgb: [125, 203, 190]   # #7DCBBE — medium teal-green
+        value: 2
+        label: "2+"
+      - rgb: [100, 190, 183]   # #64BEB7 — deeper teal
+        value: 3
+        label: "3+"

@@ -1,19 +1,20 @@
 """Strip analyzer — orchestrates the full CV pipeline."""
 
+import logging
 from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
 import yaml
 
+logger = logging.getLogger(__name__)
+
 from app.core.exceptions import ValidationError
-from app.cv.color_matching import match_to_gradient
+from app.cv.color_matching import match_to_gradient, match_to_multi_gradient
 from app.cv.preprocessing import (
     decode_image,
     resize_image,
-    to_hsv,
     validate_image_bytes,
-    white_balance,
 )
 
 
@@ -41,99 +42,54 @@ def _load_calibration(calibration_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def _find_strip_contour(image: np.ndarray) -> np.ndarray | None:
-    """Find the test strip contour by aspect ratio (3:1 to 5:1)."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    edges = cv2.dilate(edges, kernel, iterations=2)
 
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    best_contour = None
-    best_area = 0
-    img_area = image.shape[0] * image.shape[1]
-
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        # Strip should be a significant portion of the image
-        if area < img_area * 0.05:
-            continue
-        rect = cv2.minAreaRect(contour)
-        w, h = rect[1]
-        if w == 0 or h == 0:
-            continue
-        aspect = max(w, h) / min(w, h)
-        if 3.0 <= aspect <= 5.0 and area > best_area:
-            best_contour = contour
-            best_area = area
-
-    return best_contour
+# Radius (fraction of image dimension) around each sample point for median.
+SAMPLE_RADIUS = 0.025
 
 
-def _perspective_correct(image: np.ndarray, contour: np.ndarray) -> np.ndarray:
-    """Perspective-correct the strip to a rectangular image."""
-    rect = cv2.minAreaRect(contour)
-    box = cv2.boxPoints(rect)
-    box = np.intp(box)
+def _sample_point_rgb(bgr_image: np.ndarray, x_frac: float, y_frac: float) -> list[float]:
+    """Sample a small area around a point and return median RGB.
 
-    # Order points: top-left, top-right, bottom-right, bottom-left
-    box = _order_points(box.astype(np.float32))
+    (x_frac, y_frac) are fractions of image width/height.
+    Samples a square of side 2*SAMPLE_RADIUS centered on the point.
+    """
+    h, w = bgr_image.shape[:2]
+    cx, cy = int(x_frac * w), int(y_frac * h)
+    r = max(int(SAMPLE_RADIUS * min(w, h)), 2)
 
-    w = int(max(
-        np.linalg.norm(box[0] - box[1]),
-        np.linalg.norm(box[2] - box[3]),
-    ))
-    h = int(max(
-        np.linalg.norm(box[1] - box[2]),
-        np.linalg.norm(box[3] - box[0]),
-    ))
+    y1 = max(0, cy - r)
+    y2 = min(h, cy + r)
+    x1 = max(0, cx - r)
+    x2 = min(w, cx + r)
 
-    # Ensure width > height (landscape orientation)
-    if h > w:
-        w, h = h, w
+    roi = bgr_image[y1:y2, x1:x2]
+    if roi.size == 0:
+        raise ValidationError("Could not sample point — out of bounds")
 
-    dst = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
-    matrix = cv2.getPerspectiveTransform(box, dst)
-    return cv2.warpPerspective(image, matrix, (w, h))
-
-
-def _order_points(pts: np.ndarray) -> np.ndarray:
-    """Order 4 points as: top-left, top-right, bottom-right, bottom-left."""
-    rect = np.zeros((4, 2), dtype=np.float32)
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    d = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(d)]
-    rect[3] = pts[np.argmax(d)]
-    return rect
-
-
-def _sample_pad(hsv_image: np.ndarray, region: list[float]) -> list[float]:
-    """Sample the center 60% of a pad region and return median HSV."""
-    h, w = hsv_image.shape[:2]
-    x_start = int(region[0] * w)
-    y_start = int(region[1] * h)
-    pad_w = int(region[2] * w)
-    pad_h = int(region[3] * h)
-
-    # Center 60%
-    margin_x = int(pad_w * 0.2)
-    margin_y = int(pad_h * 0.2)
-    roi = hsv_image[
-        y_start + margin_y : y_start + pad_h - margin_y,
-        x_start + margin_x : x_start + pad_w - margin_x,
+    # BGR → RGB
+    return [
+        float(np.median(roi[:, :, 2])),
+        float(np.median(roi[:, :, 1])),
+        float(np.median(roi[:, :, 0])),
     ]
 
-    if roi.size == 0:
-        raise ValidationError("Could not sample pad region — strip too small or misaligned")
 
-    median_h = float(np.median(roi[:, :, 0]))
-    median_s = float(np.median(roi[:, :, 1]))
-    median_v = float(np.median(roi[:, :, 2]))
-    return [median_h, median_s, median_v]
+def _sample_points_rgb(bgr_image: np.ndarray, points: list[list[float]]) -> list[list[float]]:
+    """Sample multiple points, returning a list of RGB values."""
+    return [_sample_point_rgb(bgr_image, p[0], p[1]) for p in points]
+
+
+def _normalize_rgb(rgb: list[float], target_max: float = 230.0) -> list[float]:
+    """Scale an RGB triplet so its brightest channel equals target_max.
+
+    Phone cameras produce darker colors than printed reference charts.
+    This compensates for overall brightness differences while preserving hue.
+    """
+    mx = max(rgb)
+    if mx < 10:
+        return rgb
+    scale = target_max / mx
+    return [v * scale for v in rgb]
 
 
 def _categorize(value: float, normal_min: float, normal_max: float) -> tuple[str, bool]:
@@ -149,34 +105,41 @@ def analyze_strip(image_data: bytes, calibration_path: str) -> AnalysisResult:
     """Run the full CV analysis pipeline on a test strip image.
 
     1. Validate → decode → resize → white balance → HSV
-    2. Find strip contour (3:1–5:1 aspect ratio)
-    3. Perspective correct
-    4. Segment 4 pads → sample center 60% → median HSV
-    5. Match against calibration gradient
-    6. Return results with confidence scores
+    2. Sample each pad from fixed normalized regions in the full image frame
+    3. Match against calibration gradient
+    4. Return results with confidence scores
+
+    Pad regions are defined in the calibration YAML relative to the full image,
+    so contour detection and perspective correction are not used.
     """
     # Step 1: Preprocessing
     validate_image_bytes(image_data)
     image = decode_image(image_data)
     image = resize_image(image)
-    image = white_balance(image)
+    logger.info("CV image after resize: %dx%d", image.shape[1], image.shape[0])
 
-    # Step 2: Find strip
-    contour = _find_strip_contour(image)
-    if contour is None:
-        raise ValidationError(
-            "Could not detect a test strip in the image. "
-            "Please ensure the strip is clearly visible against a contrasting background."
-        )
+    # Save debug image so we can inspect what the pipeline receives
+    debug_path = "/tmp/babybio_debug_input.jpg"
+    cv2.imwrite(debug_path, image)
+    logger.info("CV debug image saved to %s", debug_path)
 
-    # Step 3: Perspective correct
-    corrected = _perspective_correct(image, contour)
-    hsv_image = to_hsv(corrected)
-
-    # Step 4-5: Load calibration, sample pads, match colors
+    # Step 2-3: Load calibration, sample pads, match colors
     calibration = _load_calibration(calibration_path)
     pad_geometry = calibration["pad_geometry"]
     biomarkers_config = calibration["biomarkers"]
+
+    # Draw sample points on a debug copy
+    debug_img = image.copy()
+    ih, iw = image.shape[:2]
+    r_px = max(int(SAMPLE_RADIUS * min(iw, ih)), 2)
+    for pad in pad_geometry:
+        for pt in pad["sample_points"]:
+            cx, cy = int(pt[0] * iw), int(pt[1] * ih)
+            cv2.circle(debug_img, (cx, cy), r_px, (0, 255, 0), 2)
+            cv2.putText(debug_img, pad["name"], (cx + r_px + 2, cy + 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+    cv2.imwrite("/tmp/babybio_debug_regions.jpg", debug_img)
+    logger.info("CV debug sample-points image saved to /tmp/babybio_debug_regions.jpg")
 
     results: list[BiomarkerResult] = []
     total_confidence = 0.0
@@ -184,21 +147,54 @@ def analyze_strip(image_data: bytes, calibration_path: str) -> AnalysisResult:
     for pad in pad_geometry:
         marker_name = pad["name"]
         config = biomarkers_config[marker_name]
+        points = pad["sample_points"]
 
-        median_hsv = _sample_pad(hsv_image, pad["region"])
-        label, numeric_value, confidence = match_to_gradient(median_hsv, config["gradient"])
+        is_ordinal = config.get("scale_type") == "ordinal"
+        gradient = config["gradient"]
 
-        category, is_flagged = _categorize(
-            numeric_value,
-            config["normal_min"],
-            config["normal_max"],
+        # All current gradients use RGB references
+        raw_samples = _sample_points_rgb(image, points)
+        samples = [_normalize_rgb(s) for s in raw_samples]
+
+        logger.info(
+            "CV [%s] raw RGB: %s → normalized: %s",
+            marker_name,
+            [[round(v) for v in s] for s in raw_samples],
+            [[round(v) for v in s] for s in samples],
         )
 
-        unit = config.get("unit", "")
-        display_value = f"{numeric_value} {unit}".strip() if unit else label
-        ref_range = f"{config['normal_min']}-{config['normal_max']}"
-        if unit:
-            ref_range += f" {unit}"
+        if len(samples) > 1:
+            label, numeric_value, confidence = match_to_multi_gradient(
+                samples, gradient, interpolate=not is_ordinal, is_rgb=True
+            )
+        else:
+            label, numeric_value, confidence = match_to_gradient(
+                samples[0], gradient, interpolate=not is_ordinal, is_rgb=True
+            )
+        logger.info("CV [%s] → label=%s, value=%s, conf=%s", marker_name, label, numeric_value, confidence)
+
+        if is_ordinal:
+            normal_cat = config.get("normal_category")
+            if normal_cat is not None:
+                is_flagged = label != normal_cat
+                category = label
+                ref_range = normal_cat
+            else:
+                is_flagged = False
+                category = label
+                ref_range = "—"
+            display_value = label
+        else:
+            category, is_flagged = _categorize(
+                numeric_value,
+                config["normal_min"],
+                config["normal_max"],
+            )
+            unit = config.get("unit", "")
+            display_value = f"{numeric_value} {unit}".strip() if unit else label
+            ref_range = f"{config['normal_min']}-{config['normal_max']}"
+            if unit:
+                ref_range += f" {unit}"
 
         results.append(BiomarkerResult(
             marker_name=marker_name,

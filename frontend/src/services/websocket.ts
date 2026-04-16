@@ -7,6 +7,7 @@ export class ChatWebSocket {
   private onClose: (() => void) | null = null;
 
   connect(scanId: string, token: string, handlers: {
+    onOpen?: () => void;
     onMessage: (msg: WebSocketMessage) => void;
     onError?: (error: Event) => void;
     onClose?: () => void;
@@ -16,6 +17,10 @@ export class ChatWebSocket {
     this.onMessage = handlers.onMessage;
     this.onError = handlers.onError ?? null;
     this.onClose = handlers.onClose ?? null;
+
+    this.ws.onopen = () => {
+      handlers.onOpen?.();
+    };
 
     this.ws.onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data as string) as WebSocketMessage;

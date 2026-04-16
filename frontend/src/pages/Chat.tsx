@@ -1,21 +1,40 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { MessageList } from '../components/chat/MessageList';
 import { MessageInput } from '../components/chat/MessageInput';
+import { getScan } from '../services/api';
+import type { Scan } from '../types/scan';
 
 export function Chat() {
   const { scanId } = useParams<{ scanId: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
   const { messages, isConnected, isStreaming, connect, sendMessage } = useWebSocket(scanId ?? '', token ?? '');
+  const [scan, setScan] = useState<Scan | null>(null);
 
   useEffect(() => {
     if (scanId && token) {
       connect();
+      getScan(scanId).then(setScan).catch(() => {});
     }
   }, [scanId, token, connect]);
+
+  if (!scanId) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '12px', color: '#64748B', padding: '40px 20px', textAlign: 'center' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: '48px', height: '48px', opacity: 0.4 }}>
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <p style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>No scan selected</p>
+        <p style={{ fontSize: '13px', margin: 0, opacity: 0.8 }}>Open a scan result and tap "Ask AI" to start a conversation.</p>
+        <button onClick={() => navigate('/')} style={{ marginTop: '8px', padding: '10px 20px', borderRadius: '12px', background: '#1565C0', color: '#fff', border: 'none', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+          Go to Home
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: '#F5F7FA', overflow: 'hidden' }}>
@@ -56,6 +75,38 @@ export function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Scan results strip */}
+      {scan && scan.biomarkers.length > 0 && (
+        <div style={{
+          flexShrink: 0, padding: '8px 12px',
+          background: '#fff', borderBottom: '1px solid #E2E8F0',
+          overflowX: 'auto', display: 'flex', gap: '8px', alignItems: 'center',
+        }}>
+          {scan.biomarkers.map((b) => (
+            <div key={b.marker_name} style={{
+              flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '6px 12px', borderRadius: '10px',
+              background: b.is_flagged ? '#FFF3E0' : '#F0FAF7',
+              border: `1px solid ${b.is_flagged ? '#FFB74D' : '#A7D7C5'}`,
+              minWidth: '68px',
+            }}>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                {b.marker_name}
+              </span>
+              <span style={{
+                fontSize: '14px', fontWeight: 700, marginTop: '2px',
+                color: b.is_flagged ? '#E65100' : '#00695C',
+              }}>
+                {b.value}
+              </span>
+              {b.reference_range && (
+                <span style={{ fontSize: '9px', color: '#94A3B8', marginTop: '1px' }}>{b.reference_range}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Messages */}
       <div style={{ flex: 1, overflow: 'hidden' }}>

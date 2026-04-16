@@ -8,14 +8,25 @@ export function useWebSocket(scanId: string, token: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const wsRef = useRef<ChatWebSocket | null>(null);
   const pendingContentRef = useRef('');
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // connectRef lets the onClose closure always call the latest connect()
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (wsRef.current) return;
+    if (!scanId || !token) return;
 
     const ws = new ChatWebSocket();
     wsRef.current = ws;
 
     ws.connect(scanId, token, {
+      onOpen: () => {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        setIsConnected(true);
+      },
       onMessage: (msg) => {
         if (msg.type === 'token') {
           pendingContentRef.current += msg.content;
@@ -47,16 +58,22 @@ export function useWebSocket(scanId: string, token: string) {
         }
       },
       onClose: () => {
+        wsRef.current = null;  // Clear so reconnect is possible
         setIsConnected(false);
+        setIsStreaming(false);
+        // Auto-reconnect after 2s
+        reconnectTimerRef.current = setTimeout(() => {
+          connectRef.current();
+        }, 2000);
       },
     });
-
-    setIsConnected(true);
   }, [scanId, token]);
 
-  const sendMessage = useCallback((content: string) => {
-    if (!wsRef.current) return;
+  // Keep connectRef current so the onClose closure always calls the latest version
+  connectRef.current = connect;
 
+  const sendMessage = useCallback((content: string) => {
+    // Always add user message to UI immediately so it never disappears
     setMessages((prev) => [...prev, {
       id: crypto.randomUUID(),
       role: 'user',
@@ -64,6 +81,7 @@ export function useWebSocket(scanId: string, token: string) {
       created_at: new Date().toISOString(),
     }]);
 
+    if (!wsRef.current) return;
     setIsStreaming(true);
     pendingContentRef.current = '';
     wsRef.current.sendMessage(content);
@@ -77,7 +95,9 @@ export function useWebSocket(scanId: string, token: string) {
 
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.disconnect();
+      wsRef.current = null;
     };
   }, []);
 
