@@ -1,11 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 
-// Fraction of viewport width used for the square capture guide in CameraView.
-// MUST match the width value set on the overlay square in CameraView.tsx.
-const CAPTURE_SQUARE_VW = 0.42;
-
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImage, setCapturedImage] = useState<Blob | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -51,54 +48,59 @@ export function useCamera() {
 
   const captureAsync = useCallback((): Promise<Blob | null> => {
     const video = videoRef.current;
-    if (!video) return Promise.resolve(null);
+    const overlay = overlayRef.current;
+    if (!video || !overlay || !video.videoWidth) return Promise.resolve(null);
 
-    // Draw the full video frame.
+    const vidW = video.videoWidth;
+    const vidH = video.videoHeight;
+
+    // Draw the full video frame first.
     const fullCanvas = document.createElement('canvas');
-    fullCanvas.width = video.videoWidth;
-    fullCanvas.height = video.videoHeight;
+    fullCanvas.width = vidW;
+    fullCanvas.height = vidH;
     const fullCtx = fullCanvas.getContext('2d');
     if (!fullCtx) return Promise.resolve(null);
     fullCtx.drawImage(video, 0, 0);
 
-    // Map the CSS overlay square to video pixel coordinates.
-    // The video fills its container with objectFit:cover, so we must account
-    // for the scale and the cropped offset.
-    const rect = video.getBoundingClientRect();
-    const containerW = rect.width;
-    const containerH = rect.height;
-    const vidW = video.videoWidth;
-    const vidH = video.videoHeight;
+    // Map the overlay's ACTUAL on-screen rect to video pixel coordinates.
+    // Reading from the DOM (instead of hardcoding a vw ratio) means the crop
+    // always matches whatever the CSS is currently rendering — any viewport
+    // shape, any device, after any resize.
+    const videoRect = video.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    if (videoRect.width === 0 || videoRect.height === 0) return Promise.resolve(null);
 
-    // objectFit:cover scale — the larger of the two fill ratios
-    const scale = Math.max(containerW / vidW, containerH / vidH);
+    // objectFit:cover — video scaled uniformly to fill container, cropping overflow.
+    const scale = Math.max(videoRect.width / vidW, videoRect.height / vidH);
+    // How many video pixels are hidden outside the container on each axis.
+    const visibleX = (vidW - videoRect.width / scale) / 2;
+    const visibleY = (vidH - videoRect.height / scale) / 2;
 
-    // How many video pixels are hidden on each side by the cover crop
-    const visibleX = (vidW - containerW / scale) / 2;
-    const visibleY = (vidH - containerH / scale) / 2;
+    // Overlay position relative to the video's display rect (container CSS px).
+    const overlayLeftInVideo = overlayRect.left - videoRect.left;
+    const overlayTopInVideo = overlayRect.top - videoRect.top;
 
-    // Overlay square size and centered position in CSS pixels
-    const squareCssPx = CAPTURE_SQUARE_VW * window.innerWidth;
-    const squareCssLeft = (containerW - squareCssPx) / 2;
-    const squareCssTop = (containerH - squareCssPx) / 2;
+    // Convert to video pixel coordinates.
+    const cropX = visibleX + overlayLeftInVideo / scale;
+    const cropY = visibleY + overlayTopInVideo / scale;
+    const cropW = overlayRect.width / scale;
+    const cropH = overlayRect.height / scale;
 
-    // Convert to video pixel coordinates
-    const cropX = Math.round(visibleX + squareCssLeft / scale);
-    const cropY = Math.round(visibleY + squareCssTop / scale);
-    const cropSize = Math.round(squareCssPx / scale);
+    // Clamp to video bounds and enforce a square crop (overlay is always 1:1,
+    // but rounding + bounds can drift by a pixel).
+    const clampedX = Math.max(0, Math.min(Math.round(cropX), vidW - 1));
+    const clampedY = Math.max(0, Math.min(Math.round(cropY), vidH - 1));
+    const cropSize = Math.max(
+      1,
+      Math.round(Math.min(cropW, cropH, vidW - clampedX, vidH - clampedY)),
+    );
 
-    // Clamp to video bounds
-    const clampedX = Math.max(0, Math.min(cropX, vidW - 1));
-    const clampedY = Math.max(0, Math.min(cropY, vidH - 1));
-    const clampedSize = Math.min(cropSize, vidW - clampedX, vidH - clampedY);
-
-    // Render the cropped square to a new canvas
     const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = clampedSize;
-    cropCanvas.height = clampedSize;
+    cropCanvas.width = cropSize;
+    cropCanvas.height = cropSize;
     const cropCtx = cropCanvas.getContext('2d');
     if (!cropCtx) return Promise.resolve(null);
-    cropCtx.drawImage(fullCanvas, clampedX, clampedY, clampedSize, clampedSize, 0, 0, clampedSize, clampedSize);
+    cropCtx.drawImage(fullCanvas, clampedX, clampedY, cropSize, cropSize, 0, 0, cropSize, cropSize);
 
     return new Promise((resolve) => {
       cropCanvas.toBlob((b) => {
@@ -118,5 +120,5 @@ export function useCamera() {
     setCapturedImage(null);
   }, []);
 
-  return { videoRef, isStreaming, capturedImage, startCamera, capture, captureAsync, stopCamera, resetCapture };
+  return { videoRef, overlayRef, isStreaming, capturedImage, startCamera, capture, captureAsync, stopCamera, resetCapture };
 }

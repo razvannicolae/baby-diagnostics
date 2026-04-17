@@ -22,6 +22,16 @@
 #
 # NOTE: All region values are approximate — recalibrate against actual captured images.
 
+# White-reference points on the strip backing. Used for per-channel white
+# balance: the analyzer samples these, takes the median, and scales each
+# channel so the median reads (255, 255, 255). This removes ambient lighting
+# color cast so camera-captured pads can be compared to the printed-chart
+# reference values below. Points are in the clean gaps between pH pads.
+white_reference_points:
+  - [0.18, 0.247]   # strip backing between pH pad 1 and pad 2
+  - [0.18, 0.465]   # strip backing between pH pad 2 and pad 3
+  - [0.18, 0.682]   # strip backing between pH pad 3 and pad 4
+
 pad_geometry:
   # Sample points as [x, y] fractions of the captured square image.
   # These match the dot positions shown in the camera overlay (CameraView.tsx).

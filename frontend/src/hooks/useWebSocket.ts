@@ -55,10 +55,21 @@ export function useWebSocket(scanId: string, token: string) {
         } else if (msg.type === 'error') {
           setIsStreaming(false);
           pendingContentRef.current = '';
+          // Show error as a visible message so the user knows what went wrong
+          setMessages((prev) => [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `Error: ${msg.content ?? 'Something went wrong. Please try again.'}`,
+            created_at: new Date().toISOString(),
+          }]);
         }
       },
       onClose: () => {
-        wsRef.current = null;  // Clear so reconnect is possible
+        // Only clear ref if this is still the active connection.
+        // Prevents a stale onclose (from a previous connection killed by
+        // React strict-mode cleanup) from nulling out a newer connection.
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
         setIsConnected(false);
         setIsStreaming(false);
         // Auto-reconnect after 2s
@@ -81,10 +92,12 @@ export function useWebSocket(scanId: string, token: string) {
       created_at: new Date().toISOString(),
     }]);
 
+    console.log('[WS] sendMessage called, wsRef.current:', !!wsRef.current);
     if (!wsRef.current) return;
     setIsStreaming(true);
     pendingContentRef.current = '';
     wsRef.current.sendMessage(content);
+    console.log('[WS] Message sent to WebSocket');
   }, []);
 
   const disconnect = useCallback(() => {

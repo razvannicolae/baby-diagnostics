@@ -38,6 +38,14 @@ export function Chat() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: '#F5F7FA', overflow: 'hidden' }}>
+      {/* Debug banner — remove after fixing */}
+      <div style={{ flexShrink: 0, padding: '4px 12px', background: '#1A202C', color: '#E2E8F0', fontSize: '10px', fontFamily: 'monospace', display: 'flex', gap: '12px' }}>
+        <span>ws: {isConnected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+        <span>streaming: {isStreaming ? 'YES' : 'NO'}</span>
+        <span>msgs: {messages.length}</span>
+        <span>token: {token ? 'YES' : 'NO'}</span>
+        <span>scanId: {scanId?.slice(0, 8)}</span>
+      </div>
       {/* Header */}
       <div style={{
         flexShrink: 0, padding: '14px 20px',
@@ -110,7 +118,7 @@ export function Chat() {
 
       {/* Messages */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <MessageList messages={messages} />
+        <MessageList messages={messages} isStreaming={isStreaming} />
       </div>
 
       {/* Input */}

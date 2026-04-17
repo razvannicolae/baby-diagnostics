@@ -1,19 +1,17 @@
 import type { RefObject } from 'react';
 
-// Size of the capture square guide. MUST match CAPTURE_SQUARE_VW in useCamera.ts.
-const SQ = '42vw';
-
 interface CameraViewProps {
   videoRef: RefObject<HTMLVideoElement | null>;
+  overlayRef: RefObject<HTMLDivElement | null>;
   isStreaming: boolean;
   onCapture: () => void;
 }
 
-export function CameraView({ videoRef, isStreaming, onCapture }: CameraViewProps) {
+export function CameraView({ videoRef, overlayRef, isStreaming, onCapture }: CameraViewProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
       {/* Viewfinder */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, #2a2a3a 0%, #111 100%)' }} />
         <video
           ref={videoRef}
@@ -22,19 +20,38 @@ export function CameraView({ videoRef, isStreaming, onCapture }: CameraViewProps
         />
 
         {isStreaming && (
-          /* Full-viewfinder flex layer — centers the square guide */
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            pointerEvents: 'none',
-          }}>
-            {/*
-              Square guide — position: relative so that absolutely-positioned
-              children resolve % values against THIS element's padding box.
-              width/height both = SQ so it is a square.
-            */}
-            <div style={{ position: 'relative', width: SQ, height: SQ, flexShrink: 0 }}>
-
+          /*
+            Overlay slot. `containerType: size` turns this box into a container-query
+            reference — the square's width uses `min(100cqw, 100cqh)` so it always
+            resolves to the smaller of (available width, available height). Result:
+            the square is always fully visible, always square, on any viewport shape.
+            Insets reserve room for the absolute-positioned header and baby selector
+            above, and safe-area for notched devices.
+          */
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(76px + env(safe-area-inset-top, 0px))',
+              bottom: 8,
+              left: 8,
+              right: 8,
+              zIndex: 10,
+              containerType: 'size',
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              ref={overlayRef}
+              style={{
+                position: 'relative',
+                aspectRatio: '1 / 1',
+                width: 'min(100cqw, 100cqh)',
+                flexShrink: 0,
+              }}
+            >
               {/* Outer border */}
               <div style={{
                 position: 'absolute', inset: 0,
@@ -69,22 +86,18 @@ export function CameraView({ videoRef, isStreaming, onCapture }: CameraViewProps
               <div style={{ position: 'absolute', left: '54.5%', top: '47.5%', fontSize: 9, fontWeight: 700, color: '#34D399', background: 'rgba(0,0,0,0.6)', padding: '1px 4px', borderRadius: 3 }}>Alb</div>
               {/* dot at x=71%, y=66.5% */}
               <div style={{ position: 'absolute', left: '71%', top: '66.5%', transform: 'translate(-50%,-50%)', width: 8, height: 8, borderRadius: '50%', background: '#34D399', border: '1.5px solid #fff', boxShadow: '0 0 4px rgba(0,0,0,0.7)' }} />
-
-              {/* Label below square */}
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 8, textAlign: 'center' }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>Align insert within square</span>
-              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Tip bar */}
+      {/* Tip bar — in flex flow so it can never overlap the square */}
       <div style={{
-        position: 'absolute', bottom: 140, left: 16, right: 16,
+        flexShrink: 0,
+        margin: '0 16px 8px 16px',
         background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)',
         borderRadius: 12, padding: 12, display: 'flex', gap: 10, alignItems: 'center',
-        border: '1px solid rgba(255,255,255,0.1)', zIndex: 20,
+        border: '1px solid rgba(255,255,255,0.1)',
       }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(96,165,250,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2" style={{ width: 14, height: 14 }}>
@@ -97,7 +110,12 @@ export function CameraView({ videoRef, isStreaming, onCapture }: CameraViewProps
       </div>
 
       {/* Controls */}
-      <div style={{ flexShrink: 0, padding: '32px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, position: 'relative', zIndex: 20, background: '#111' }}>
+      <div style={{
+        flexShrink: 0,
+        padding: '20px 24px calc(20px + env(safe-area-inset-bottom, 0px))',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40,
+        position: 'relative', zIndex: 20, background: '#111',
+      }}>
         {isStreaming ? (
           <>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

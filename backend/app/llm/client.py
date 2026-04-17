@@ -1,66 +1,82 @@
-"""LLM client — supports Anthropic Claude and local LM Studio models."""
+"""LLM client — streams chat completions from a local LM Studio server.
+
+LM Studio exposes an OpenAI-compatible chat-completions endpoint at
+``{LMSTUDIO_BASE_URL}/v1/chat/completions``. No API key is required: the
+server runs entirely on localhost.
+
+Qwen3 MoE models (e.g. qwen3.5-35b-a3b) stream an internal chain-of-thought
+via ``reasoning_content`` before emitting the actual ``content``.  We handle
+both fields: reasoning tokens are silently consumed so the connection stays
+alive, and only ``content`` tokens are yielded to callers.
+"""
 
 import json
+import logging
 from collections.abc import AsyncGenerator
 
-import anthropic
 import httpx
 
 from app.config import settings
 from app.core.exceptions import AppError
 
-
-class _AnthropicBackend:
-    def __init__(self) -> None:
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    async def stream_response(
-        self,
-        system_prompt: str,
-        messages: list[dict[str, str]],
-    ) -> AsyncGenerator[str, None]:
-        async with self._client.messages.stream(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            temperature=0.3,
-            system=system_prompt,
-            messages=messages,
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
+logger = logging.getLogger(__name__)
 
 
-class _LMStudioBackend:
-    def __init__(self) -> None:
-        self._headers: dict[str, str] = {"Content-Type": "application/json"}
-        if settings.lmstudio_api_key:
-            self._headers["Authorization"] = f"Bearer {settings.lmstudio_api_key}"
+class LLMClient:
+    """Streams tokens from the local LM Studio server."""
 
     async def stream_response(
         self,
         system_prompt: str,
         messages: list[dict[str, str]],
     ) -> AsyncGenerator[str, None]:
+        """Stream tokens from LM Studio as they arrive.
+
+        Yields individual text chunks parsed from the OpenAI SSE format.
+        Silently consumes ``reasoning_content`` tokens produced by Qwen3's
+        internal chain-of-thought so the HTTP stream stays alive during the
+        model's thinking phase.
+        """
         payload = {
             "model": settings.lmstudio_model,
             "messages": [{"role": "system", "content": system_prompt}, *messages],
             "stream": True,
             "temperature": 0.3,
-            "max_tokens": 1024,
+            "max_tokens": 8192,
         }
         url = f"{settings.lmstudio_base_url}/v1/chat/completions"
+        headers = {"Content-Type": "application/json"}
+
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream("POST", url, json=payload, headers=self._headers) as response:
+            # Long timeout — local models on CPU/small GPU can take minutes
+            # to finish the thinking phase before producing content.
+            timeout = httpx.Timeout(10.0, read=300.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
                     response.raise_for_status()
+                    thinking = True
                     async for line in response.aiter_lines():
                         if not line.startswith("data: "):
                             continue
                         data = line[6:]
                         if data == "[DONE]":
                             break
-                        chunk = json.loads(data)
-                        content = chunk["choices"][0]["delta"].get("content")
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        delta = chunk["choices"][0].get("delta", {})
+
+                        # Qwen3 streams reasoning_content first, then content.
+                        # We silently consume reasoning tokens (keeps the HTTP
+                        # stream alive so httpx doesn't timeout).
+                        if delta.get("reasoning_content"):
+                            if thinking:
+                                logger.debug("LLM thinking phase started")
+                                thinking = False
+                            continue
+
+                        content = delta.get("content")
                         if content:
                             yield content
         except httpx.ConnectError:
@@ -69,31 +85,12 @@ class _LMStudioBackend:
                 "Make sure the server is running and a model is loaded."
             )
         except httpx.TimeoutError:
-            raise AppError("LM Studio timed out — the model may be overloaded or too large to respond in time.")
+            raise AppError(
+                "LM Studio timed out — the model may be overloaded or too large "
+                "to respond in time. Try a smaller model."
+            )
         except httpx.HTTPStatusError as e:
             raise AppError(f"LM Studio returned an error: {e.response.status_code}")
-
-
-class LLMClient:
-    """Routes LLM calls to Anthropic or LM Studio based on LLM_PROVIDER setting."""
-
-    def __init__(self) -> None:
-        if settings.llm_provider == "lmstudio":
-            self._backend: _AnthropicBackend | _LMStudioBackend = _LMStudioBackend()
-        else:
-            self._backend = _AnthropicBackend()
-
-    async def stream_response(
-        self,
-        system_prompt: str,
-        messages: list[dict[str, str]],
-    ) -> AsyncGenerator[str, None]:
-        """Stream tokens from the configured LLM provider.
-
-        Yields individual text chunks as they arrive.
-        """
-        async for text in self._backend.stream_response(system_prompt, messages):
-            yield text
 
 
 # Global singleton

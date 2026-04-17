@@ -4,11 +4,12 @@ import { getBabies, getScans } from '../services/api';
 import { Spinner } from '../components/ui/Spinner';
 import type { Baby, Scan, Biomarker } from '../types/scan';
 
+// min/max define the reference (normal) range band on the sparkline.
+// normalLabel overrides the "Normal: X–Y" text for ordinal biomarkers.
 const MARKERS = [
-  { key: 'pH', label: 'pH', unit: '', min: 5.0, max: 7.0 },
-  { key: 'creatinine', label: 'Creatinine', unit: 'mg/dL', min: 0.2, max: 0.8 },
-  { key: 'vitamin_a', label: 'Vitamin A', unit: 'mcg/dL', min: 20, max: 60 },
-  { key: 'vitamin_d', label: 'Vitamin D', unit: 'ng/mL', min: 30, max: 80 },
+  { key: 'pH',         label: 'pH',         unit: '', min: 6.0, max: 8.0,  normalLabel: '6–8'     },
+  { key: 'creatinine', label: 'Creatinine', unit: '', min: 2.5, max: 3.0,  normalLabel: '3+'      },
+  { key: 'albumin',    label: 'Albumin',    unit: '', min: 0.0, max: 0.5,  normalLabel: 'normal'  },
 ] as const;
 
 interface DataPoint {
@@ -22,10 +23,11 @@ interface ChartCardProps {
   unit: string;
   refMin: number;
   refMax: number;
+  normalLabel: string;
   dataPoints: DataPoint[];
 }
 
-function ChartCard({ label, unit, refMin, refMax, dataPoints }: ChartCardProps) {
+function ChartCard({ label, unit, refMin, refMax, normalLabel, dataPoints }: ChartCardProps) {
   const latest = dataPoints.length > 0 ? dataPoints[dataPoints.length - 1] : null;
   const isFlagged = latest?.flagged ?? false;
   const accentColor = isFlagged ? '#D97706' : '#16A34A';
@@ -97,7 +99,7 @@ function ChartCard({ label, unit, refMin, refMax, dataPoints }: ChartCardProps) 
         <div>
           <div style={{ fontSize: '14px', fontWeight: 600, color: '#1A202C' }}>{label}</div>
           <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
-            Normal: {refMin}–{refMax}{unit ? ` ${unit}` : ''}
+            Normal: {normalLabel}{unit ? ` ${unit}` : ''}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -272,6 +274,7 @@ export function Trends() {
                   unit={m.unit}
                   refMin={m.min}
                   refMax={m.max}
+                  normalLabel={m.normalLabel}
                   dataPoints={markerData[m.key]}
                 />
               ))}

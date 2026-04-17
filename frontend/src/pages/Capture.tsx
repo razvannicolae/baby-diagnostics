@@ -10,7 +10,7 @@ import type { Baby } from '../types/scan';
 
 export function Capture() {
   const navigate = useNavigate();
-  const { videoRef, isStreaming, capturedImage, startCamera, captureAsync, stopCamera, resetCapture } = useCamera();
+  const { videoRef, overlayRef, isStreaming, capturedImage, startCamera, captureAsync, stopCamera, resetCapture } = useCamera();
   const { isAnalyzing, error: analysisError, analyze } = useAnalysis();
   const [babies, setBabies] = useState<Baby[]>([]);
   const [selectedBabyId, setSelectedBabyId] = useState<string>('');
@@ -140,7 +140,7 @@ export function Capture() {
             isAnalyzing={isAnalyzing}
           />
         ) : (
-          <CameraView videoRef={videoRef} isStreaming={isStreaming} onCapture={handleCapture} />
+          <CameraView videoRef={videoRef} overlayRef={overlayRef} isStreaming={isStreaming} onCapture={handleCapture} />
         )
       )}
     </div>

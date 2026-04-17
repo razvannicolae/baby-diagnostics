@@ -12,6 +12,9 @@ class Settings(BaseSettings):
         env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # Ignore legacy env vars (e.g. ANTHROPIC_API_KEY) left over from
+        # previous configurations so that old `.env` files keep working.
+        extra="ignore",
     )
 
     # Database
@@ -26,12 +29,9 @@ class Settings(BaseSettings):
     # Field Encryption
     field_encryption_key: str = ""
 
-    # LLM
-    anthropic_api_key: str = ""
-    llm_provider: str = "anthropic"          # "anthropic" | "lmstudio"
+    # LLM — local LM Studio server (OpenAI-compatible, no API key required)
     lmstudio_base_url: str = "http://127.0.0.1:1234"
-    lmstudio_api_key: str = ""               # optional — only if auth is enabled in LM Studio
-    lmstudio_model: str = "qwen3.6"          # model name as shown in LM Studio
+    lmstudio_model: str = "local-model"      # identifier is ignored by LM Studio
 
     # CV
     calibration_path: str = "app/cv/calibration/default.yaml"

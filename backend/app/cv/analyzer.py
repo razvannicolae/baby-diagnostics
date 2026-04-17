@@ -79,17 +79,41 @@ def _sample_points_rgb(bgr_image: np.ndarray, points: list[list[float]]) -> list
     return [_sample_point_rgb(bgr_image, p[0], p[1]) for p in points]
 
 
-def _normalize_rgb(rgb: list[float], target_max: float = 230.0) -> list[float]:
-    """Scale an RGB triplet so its brightest channel equals target_max.
+def _compute_white_balance(
+    bgr_image: np.ndarray,
+    white_points: list[list[float]],
+) -> tuple[float, float, float]:
+    """Sample the strip's white backing and return per-channel scale factors.
 
-    Phone cameras produce darker colors than printed reference charts.
-    This compensates for overall brightness differences while preserving hue.
+    Takes the median RGB across the provided white-reference points and
+    returns scale factors ``(sr, sg, sb)`` that would remap that median to
+    (255, 255, 255). Applying these factors to all subsequent samples cancels
+    out the ambient lighting's color cast, so camera-captured colors can be
+    fairly compared to the printed-chart reference values in the calibration.
     """
-    mx = max(rgb)
-    if mx < 10:
-        return rgb
-    scale = target_max / mx
-    return [v * scale for v in rgb]
+    whites = [_sample_point_rgb(bgr_image, p[0], p[1]) for p in white_points]
+    # Per-channel median across samples — robust to one bad point.
+    med_r = float(np.median([w[0] for w in whites]))
+    med_g = float(np.median([w[1] for w in whites]))
+    med_b = float(np.median([w[2] for w in whites]))
+    # Guard against a sensor that recorded near-black for any channel.
+    sr = 255.0 / med_r if med_r > 1 else 1.0
+    sg = 255.0 / med_g if med_g > 1 else 1.0
+    sb = 255.0 / med_b if med_b > 1 else 1.0
+    return sr, sg, sb
+
+
+def _apply_white_balance(
+    rgb: list[float],
+    scales: tuple[float, float, float],
+) -> list[float]:
+    """Scale each channel by the matching factor and clamp to [0, 255]."""
+    sr, sg, sb = scales
+    return [
+        min(255.0, max(0.0, rgb[0] * sr)),
+        min(255.0, max(0.0, rgb[1] * sg)),
+        min(255.0, max(0.0, rgb[2] * sb)),
+    ]
 
 
 def _categorize(value: float, normal_min: float, normal_max: float) -> tuple[str, bool]:
@@ -127,6 +151,17 @@ def analyze_strip(image_data: bytes, calibration_path: str) -> AnalysisResult:
     calibration = _load_calibration(calibration_path)
     pad_geometry = calibration["pad_geometry"]
     biomarkers_config = calibration["biomarkers"]
+    white_points = calibration.get("white_reference_points", [])
+
+    # Compute white-balance scales once per image (optional — absent in older
+    # calibrations). Samples are later multiplied by these to cancel lighting.
+    wb_scales: tuple[float, float, float] | None = None
+    if white_points:
+        wb_scales = _compute_white_balance(image, white_points)
+        logger.info(
+            "CV white balance scales (R,G,B): (%.3f, %.3f, %.3f)",
+            wb_scales[0], wb_scales[1], wb_scales[2],
+        )
 
     # Draw sample points on a debug copy
     debug_img = image.copy()
@@ -138,6 +173,9 @@ def analyze_strip(image_data: bytes, calibration_path: str) -> AnalysisResult:
             cv2.circle(debug_img, (cx, cy), r_px, (0, 255, 0), 2)
             cv2.putText(debug_img, pad["name"], (cx + r_px + 2, cy + 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+    for pt in white_points:
+        cx, cy = int(pt[0] * iw), int(pt[1] * ih)
+        cv2.circle(debug_img, (cx, cy), r_px, (255, 255, 255), 2)
     cv2.imwrite("/tmp/babybio_debug_regions.jpg", debug_img)
     logger.info("CV debug sample-points image saved to /tmp/babybio_debug_regions.jpg")
 
@@ -152,12 +190,15 @@ def analyze_strip(image_data: bytes, calibration_path: str) -> AnalysisResult:
         is_ordinal = config.get("scale_type") == "ordinal"
         gradient = config["gradient"]
 
-        # All current gradients use RGB references
+        # All current gradients use RGB references.
         raw_samples = _sample_points_rgb(image, points)
-        samples = [_normalize_rgb(s) for s in raw_samples]
+        if wb_scales is not None:
+            samples = [_apply_white_balance(s, wb_scales) for s in raw_samples]
+        else:
+            samples = raw_samples
 
         logger.info(
-            "CV [%s] raw RGB: %s → normalized: %s",
+            "CV [%s] raw RGB: %s → WB: %s",
             marker_name,
             [[round(v) for v in s] for s in raw_samples],
             [[round(v) for v in s] for s in samples],
